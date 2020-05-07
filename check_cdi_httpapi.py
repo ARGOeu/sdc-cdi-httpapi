@@ -127,7 +127,7 @@ def checkHealth(URL, timeout):
     else:
         resp = content
 
-    if resp != "Server is alive":
+    if resp != "Server is alive" and resp != "Server is alive!" :
         description = "WARNING - Unexpected response: %s" % resp
         exit_code = 1
         return description, exit_code
