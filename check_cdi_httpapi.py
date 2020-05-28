@@ -127,7 +127,7 @@ def checkHealth(URL, timeout):
     else:
         resp = content
 
-    if resp != "Server is alive":
+    if resp != "Server is alive" and  resp != "Server is alive!":
         description = "WARNING - Unexpected response: %s" % resp
         exit_code = 1
         return description, exit_code
@@ -331,7 +331,7 @@ def checkBatchIfEnabled (batch_id, URL, token, exit_code, timeout):
             description = "OK - Batch is "+status
             exit_code = 0
     return description, exit_code, token, status
-def checkQualityCheck (batch_id, URL, token, exit_code, timeout):
+def checkQualityCheck (batch_id, URL, token, exit_code, timeout, arguments):
 
     """ ask the APIs if the batch is enabled
            URL : service hostname
@@ -355,6 +355,9 @@ def checkQualityCheck (batch_id, URL, token, exit_code, timeout):
 
 
     headers = {'Authorization': 'Bearer %s' % token}
+    out = requests.delete(url=u, timeout=timeout, headers=headers)
+    if arguments.debug :
+        print out.content 
     try:
         out = requests.put(url=u, timeout=timeout, headers=headers, data=json.dumps(responseBody))
     except BaseException as e:
@@ -384,7 +387,7 @@ def checkQualityCheck (batch_id, URL, token, exit_code, timeout):
     exit_code = 0
     return description, exit_code, token, status
 
-def deleteBatchJob( batch_id, URL, token, exit_code, timeout):
+def deleteBatchJob( batch_id, URL, token, exit_code, timeout, arguments):
 
     out = None
     status = None
@@ -405,14 +408,26 @@ def deleteBatchJob( batch_id, URL, token, exit_code, timeout):
     headers = {'Authorization': 'Bearer %s' % token}
     try:
         out = requests.delete(url=u, timeout=timeout, headers=headers, data=json.dumps(responseBody))
-        print "test"
+	content = out.json()
     except BaseException as e:
         description = "UNKNOWN - (deleteBatchJob) Unknown error: %s" % str(e)
         exit_code = 3
         return description, exit_code, token, status
-    content = out.json()
+    if arguments.debug:
+        print content
+    #delete quality check
+    u = URL + "/api/ingestion/"+batch_id+"/qc/ls:0.1"
+    headers = {'Authorization': 'Bearer %s' % token}
+    outDelete = requests.delete(url=u, timeout=timeout, headers=headers)
+    if arguments.debug:
+        print json.dumps(outDelete.content)
     resp = content['Response']['data']
-    status = resp['status']
+    if resp is not None and "status" in resp:
+        status = resp['status']
+    else: 
+        description = "UNKNOWN - (deleteBatchJob) - cannot delete? Unknown error"
+        exit_code = 3
+        return description, exit_code, token, status
 
     description = "OK - Batch with batch id " + batch_id  +" is "+ status
     exit_code = 0
@@ -453,11 +468,11 @@ def main():
     parser.add_argument("--timeout", "-t", metavar="seconds", help="Timeout in seconds. Must be greater than zero", type=int, default=30)
     parser.add_argument("--user", "-u", metavar="user", help="User name to allow checks on authenticated endpoints")
     parser.add_argument("--password", "-P", metavar="password", help="Passoword to allow checks on authenticated endpoints")
-    parser.add_argument("--verbose", "-v", dest='debug', help='Set verbosity level', action='count', default=0)
+    parser.add_argument("--verbose", "-v", dest='debug', help='Set verbosity level',  action="store_true")
     arguments = parser.parse_args()
     ValidateValues(arguments)
 
-    if arguments.debug :
+    if arguments.debug:
         debugValues(arguments)
 
     URL = arguments.hostname
@@ -492,11 +507,11 @@ def main():
     # No valid authentication token received, unable to continue
     checkResult( token, description, exit_code)
 
-    description, exit_code, token, status = checkQualityCheck (batch_id, URL, token, exit_code, arguments.timeout)
+    description, exit_code, token, status = checkQualityCheck (batch_id, URL, token, exit_code, arguments.timeout, arguments)
     # Authentication failed, unable to continue
     checkResult( token, description, exit_code)
 
-    description, exit_code, token, status = deleteBatchJob (batch_id, URL, token, exit_code, arguments.timeout)
+    description, exit_code, token, status = deleteBatchJob (batch_id, URL, token, exit_code, arguments.timeout, arguments)
     checkResult( token, description, exit_code)
 
     printResult(description, exit_code)
@@ -506,4 +521,3 @@ if __name__ == "__main__":
     main()
 
 
-                                                   
