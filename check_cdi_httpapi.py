@@ -91,7 +91,7 @@ def debugValues(arguments):
         print("[debugValues] - password: ******")
 
 
-def checkHealth(URL, timeout):
+def checkHealth(URL, timeout, arguments):
     """ Check service status.
         Args:
            URL : service hostname
@@ -101,6 +101,8 @@ def checkHealth(URL, timeout):
     u = URL + "/api/status"
     try:
         out = requests.get(url=u, timeout=timeout)
+	if arguments.debug:
+           print "checkhealth: "+ out.content
 
     except requests.exceptions.SSLError:
         description = "WARNING - Invalid SSL certificate"
@@ -137,7 +139,7 @@ def checkHealth(URL, timeout):
     return description, exit_code
 
 
-def checkAuthentication(URL, timeout, user, password):
+def checkAuthentication(URL, timeout, user, password, arguments):
     """ Check service authentication.
         Args:
            URL : service hostname
@@ -152,6 +154,9 @@ def checkAuthentication(URL, timeout, user, password):
     try:
         payload = {'username': user, 'password': password}
         out = requests.post(url=u, timeout=timeout, data=payload)
+	if arguments.debug:
+           print "checkAuthentication: "+ out.content
+
     except BaseException as e:
         description = "UNKNOWN - (Login) Unknown error: %s" % str(e)
         exit_code = 3
@@ -218,7 +223,7 @@ def checkLogout(URL, timeout, token):
     exit_code = 0
     return description, exit_code, token
 
-def checkBatchPost (URL, token, exit_code, timeout):
+def checkBatchPost (URL, token, exit_code, timeout, arguments):
     """ Create the new batch request
            URL : service hostname
            timeout : how long should we wait for a response from the server
@@ -235,9 +240,13 @@ def checkBatchPost (URL, token, exit_code, timeout):
     file_size = "1473570"
     data_file_count = "1"
     params = {
-        "request_id": batch_id, "edmo_code": 12345, "datetime": now,
-        "version": "1", "api_function": "datafiles_download",
-        "test_mode": "true", "parameters": {
+        "request_id": batch_id,
+        "edmo_code": 12345,
+        "datetime": now,
+        "version": "1",
+        "api_function": "datafiles_download",
+        "test_mode": "true",
+        "parameters": {
             "backdoor": True,
             "batch_number": batch_id,
             "file_checksum": file_checksum,
@@ -246,13 +255,21 @@ def checkBatchPost (URL, token, exit_code, timeout):
             "download_path": download_path,
             "file_name": file_name
         }
-        }
-    params = json.dumps(params)
+    }
 
     u = URL + "/api/ingestion/"+batch_id
     headers = {'Authorization': 'Bearer %s' % token}
     try:
         out = requests.post(url=u, timeout=timeout, data=params, headers=headers)
+	if arguments.debug :
+            print "--------checkBatchPost----------"
+            print "--------checkBatchPost body----------"
+            print(out.request.body)
+            print "--------checkBatchPost headers----------"
+            print(out.request.headers)
+            print "--------checkBatchPost content----------"
+            print out.content
+            print "--------checkBatchPost end----------"
     except BaseException as e:
         description = "UNKNOWN - (Create Batch)  Unknown error: %s" % str(e)
         exit_code = 3
@@ -331,6 +348,7 @@ def checkBatchIfEnabled (batch_id, URL, token, exit_code, timeout):
             description = "OK - Batch is "+status
             exit_code = 0
     return description, exit_code, token, status
+
 def checkQualityCheck (batch_id, URL, token, exit_code, timeout, arguments):
 
     """ ask the APIs if the batch is enabled
@@ -344,22 +362,26 @@ def checkQualityCheck (batch_id, URL, token, exit_code, timeout, arguments):
     now = datetime.today().strftime("%Y%m%dT%H:%M:%S")
     u = URL + "/api/ingestion/"+batch_id+"/qc/ls:0.1"
     responseBody = {'request_id': batch_id,
-                    'edmo_code': 12345,
+                    'api_function':'qc',
+                    'version': '1',
+                    'parameters': '{}',
+                    'edmo_code': 23451,
                     'version': 1,
                     'test_mode': True,
                     'eudat_backdoor':True,
-                    'datetime': now,
-                    'api_function': 'qc',
-                    'parameters': {}
-                    }
-
+                    'datetime': now
+    }
 
     headers = {'Authorization': 'Bearer %s' % token}
     out = requests.delete(url=u, timeout=timeout, headers=headers)
     if arguments.debug :
         print out.content 
     try:
-        out = requests.put(url=u, timeout=timeout, headers=headers, data=json.dumps(responseBody))
+        out = requests.put(url=u, timeout=timeout, headers=headers, data=responseBody)
+	if arguments.debug :
+            print(out.request.body)
+            print(out.request.headers)
+            print out.content
     except BaseException as e:
         description = "UNKNOWN - (checkQualityCheck) Unknown error: %s" % str(e)
         exit_code = 3
@@ -407,7 +429,7 @@ def deleteBatchJob( batch_id, URL, token, exit_code, timeout, arguments):
                     }
     headers = {'Authorization': 'Bearer %s' % token}
     try:
-        out = requests.delete(url=u, timeout=timeout, headers=headers, data=json.dumps(responseBody))
+        out = requests.delete(url=u, timeout=timeout, headers=headers, data=responseBody)
 	content = out.json()
     except BaseException as e:
         description = "UNKNOWN - (deleteBatchJob) Unknown error: %s" % str(e)
@@ -419,8 +441,10 @@ def deleteBatchJob( batch_id, URL, token, exit_code, timeout, arguments):
     u = URL + "/api/ingestion/"+batch_id+"/qc/ls:0.1"
     headers = {'Authorization': 'Bearer %s' % token}
     outDelete = requests.delete(url=u, timeout=timeout, headers=headers)
+	
     if arguments.debug:
         print json.dumps(outDelete.content)
+	
     resp = content['Response']['data']
     if resp is not None and "status" in resp:
         status = resp['status']
@@ -479,7 +503,7 @@ def main():
     if arguments.port is not None:
         URL += ":%s" % arguments.port
 
-    description, exit_code = checkHealth(URL, arguments.timeout)
+    description, exit_code = checkHealth(URL, arguments.timeout, arguments)
 
     # Healt check failed, unable to continue
     if exit_code > 0:
@@ -490,9 +514,7 @@ def main():
         printResult(description, exit_code)
 
     description, exit_code, token = checkAuthentication(
-        URL, arguments.timeout, arguments.user, arguments.password)
-
-    checkResult( token, description, exit_code)
+        URL, arguments.timeout, arguments.user, arguments.password, arguments)
 
     # No valid authentication token received, unable to continue
     checkResult( token, description, exit_code)
