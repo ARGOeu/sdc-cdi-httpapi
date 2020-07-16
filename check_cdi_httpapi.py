@@ -520,7 +520,7 @@ def main():
     checkResult( token, description, exit_code)
 
     description, exit_code, token, task_worker_id, batch_id = checkBatchPost (
-        URL, token, exit_code, arguments.timeout)
+        URL, token, exit_code, arguments.timeout, arguments)
 
     #check if batch is enabled at the api
     description, exit_code, token, status = checkBatchIfEnabled (batch_id,
